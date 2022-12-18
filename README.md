@@ -4,6 +4,10 @@ pAlembic stands for pseudo alembic, it's the only raw SQL supported version of a
 
 *(It only supports postgreSQL currently)*
 
+# Brief Overview
+
+![Click Here](https://www.youtube.com/watch?v=Kfyb6UymNTg)
+
 # Dependencies
 
 All dependencies are stated in the requirements.txt file. Only thing you need to do is to execute following command:
