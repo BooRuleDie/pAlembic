@@ -46,14 +46,13 @@ def getDatabaseCredentials():
             dbcredsdict["port"] = int(input("Port: "))
 
             dbcreds = DBCREDS(**dbcredsdict)
+            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.\n")
             print(error)
-            sys.exit()
-        else:
-            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
+            sys.exit()      
             
-            return dbcreds
+        return dbcreds
             
     elif selectedOption == 2:
 
@@ -69,14 +68,13 @@ def getDatabaseCredentials():
                     env_file = ".env"
 
             dbcreds = DBCREDS(_env_file=".env") 
+            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.\n")
             print(error)
             sys.exit()
-        else: 
-            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
 
-            return dbcreds
+        return dbcreds
     
     elif selectedOption == 3:
 
@@ -89,14 +87,13 @@ def getDatabaseCredentials():
                 port: int
 
             dbcreds = DBCREDS()
+            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.\n")
             print(error)
             sys.exit()
-        else: 
-            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
-
-            return dbcreds
+        
+        return dbcreds
 
 def createConfJSON(creds):
     confFile = creds.dict()
@@ -111,7 +108,7 @@ def createConfJSON(creds):
 def testDbConnection(creds):
     try:
         with psycopg.connect(str(creds)) as conn:            
-            with conn.cursor() as cursor:
+            with conn.cursor():
                 print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Connected to the database successfully")
                 
     except Exception as error:
@@ -130,7 +127,6 @@ def createPhasesDirectory():
         print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Phases directory created")
 
 def addPhase():
-    phaseNumber = None
     with open("./conf.json", "r") as file:
         phaseNumber = int(json.load(file)["totalPhase"]) + 1
 
@@ -142,29 +138,27 @@ def addPhase():
     try:
         with open(f"./Phases/{phaseNumber}.json", "w") as fp:
             json.dump(phase, fp)
-            increaseTotalPhase()
+            changePhaseStatus("+total")
+            print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} phase {phaseNumber} has been added.")
     except Exception as error:
         print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when creating phase file.\n")
         print(error)
         sys.exit()
     
-    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} phase {phaseNumber} has been added.")
-
 def removePhase():
-    phaseNumber = None
-    with open("./conf.json", "r") as file:
-        phaseNumber = int(json.load(file)["totalPhase"])
-    
     try:
-        remove(f'./Phases/{phaseNumber}.json')
-        
         with open("./conf.json", "r") as file:
-            conf = json.load(file)
+            confJSON = json.load(file)
+            phaseNumber = confJSON["totalPhase"]
+            currentPhase = confJSON["phase"]
         
-        conf["totalPhase"] -= 1
-
-        with open("./conf.json", "w") as file:        
-            json.dump(conf, file)
+        if currentPhase == phaseNumber:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} You can't remove the phase you're on.\n")
+            print(error)
+            sys.exit()
+    
+        remove(f'./Phases/{phaseNumber}.json')  
+        changePhaseStatus("-total")
 
         print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} phase {phaseNumber} has been removed.")
 
@@ -173,20 +167,18 @@ def removePhase():
         print(error)
         sys.exit()
 
-def increasePhaseStatus():
+def changePhaseStatus(change):
     with open("./conf.json", "r") as file:
         conf = json.load(file)
     
-    conf["phase"] += 1
-
-    with open("./conf.json", "w") as file:        
-        json.dump(conf, file)
-
-def increaseTotalPhase():
-    with open("./conf.json", "r") as file:
-        conf = json.load(file)
-    
-    conf["totalPhase"] += 1
+    if change == "+phase":
+        conf["phase"] += 1
+    elif change == "-phase":
+        conf["phase"] -= 1
+    elif change == "+total":
+        conf["totalPhase"] += 1
+    elif change == "-total":
+        conf["totalPhase"] -= 1
 
     with open("./conf.json", "w") as file:        
         json.dump(conf, file)
@@ -232,7 +224,7 @@ def upgradePhase():
             with psycopg.connect(str(creds)) as conn:            
                 with conn.cursor() as cursor:
                     cursor.execute(upgradeSQL)
-                    increasePhaseStatus()
+                    changePhaseStatus("+phase")
                 
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
@@ -274,14 +266,7 @@ def downgradePhase():
             with psycopg.connect(str(creds)) as conn:            
                 with conn.cursor() as cursor:
                     cursor.execute(downgradeSQL)
-                     
-                    with open("./conf.json", "r") as file:
-                        conf = json.load(file)
-                    
-                    conf["phase"] -= 1
-
-                    with open("./conf.json", "w") as file:        
-                        json.dump(conf, file)
+                    changePhaseStatus("-phase")
                 
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
