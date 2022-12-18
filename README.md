@@ -75,11 +75,11 @@ If you're going to choose **2** or **3**, name your environment variables as it'
 
 ```.env
 # names are important for pAlembic
-dbname=palembic_db
-user=palembic
-password=palembic
-host=localhost
-port=5433
+dbname=<anything>
+user=<anything>
+password=<anything>
+host=<anything>
+port=<anything>
 ```
 
 ---
