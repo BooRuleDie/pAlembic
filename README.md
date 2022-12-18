@@ -84,4 +84,4 @@ port=5433
 
 ---
 
-Database credentials are stored plaintext in the conf.py, so if you're using pAlembic in production environment, give proper permission to the **conf.json** and **palembic.py**.
+Database credentials are stored plaintext in the conf.json, so if you're using pAlembic in the production environment, give proper permission to the **conf.json** and **palembic.py**.
