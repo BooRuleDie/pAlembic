@@ -1,6 +1,8 @@
 from pydantic import BaseModel, BaseSettings
 from colorama import Fore, Back, Style
-from os import mkdir
+from os import mkdir, remove
+from shutil import rmtree
+import json
 import psycopg
 import sys
 
@@ -55,16 +57,6 @@ def getDatabaseCredentials():
             
     elif selectedOption == 2:
 
-        print(f"""
-{Style.BRIGHT}.env file's format must be as follows:{Style.RESET_ALL}
-
-# you can change the values as you want
-dbname=palembic_db
-user=palembic
-password=palembic
-host=192.168.1.46
-port=5432""")
-
         try: 
             class DBCREDS(BaseSettings):
                 dbname: str
@@ -106,9 +98,19 @@ port=5432""")
 
             return dbcreds
 
+def createConfJSON(creds):
+    confFile = creds.dict()
+    confFile["phase"] = 0
+    confFile["totalPhase"] = 0
+    
+    with open("conf.json", "w") as fp:
+        json.dump(confFile, fp)
+        
+    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} conf.json file has been created.")
+
 def testDbConnection(creds):
     try:
-        with psycopg.connect(**creds.dict()) as conn:            
+        with psycopg.connect(str(creds)) as conn:            
             with conn.cursor() as cursor:
                 print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Connected to the database successfully")
                 
@@ -127,7 +129,177 @@ def createPhasesDirectory():
     else:
         print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Phases directory created")
 
-def main():
+def addPhase():
+    phaseNumber = None
+    with open("./conf.json", "r") as file:
+        phaseNumber = int(json.load(file)["totalPhase"]) + 1
+
+    phase = {
+        "upgrade" : "raw SQL here",
+        "downgrade" : "raw SQL here"
+    }
+
+    try:
+        with open(f"./Phases/{phaseNumber}.json", "w") as fp:
+            json.dump(phase, fp)
+            increaseTotalPhase()
+    except Exception as error:
+        print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when creating phase file.\n")
+        print(error)
+        sys.exit()
+    
+    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} phase {phaseNumber} has been added.")
+
+def removePhase():
+    phaseNumber = None
+    with open("./conf.json", "r") as file:
+        phaseNumber = int(json.load(file)["totalPhase"])
+    
+    try:
+        remove(f'./Phases/{phaseNumber}.json')
+        
+        with open("./conf.json", "r") as file:
+            conf = json.load(file)
+        
+        conf["totalPhase"] -= 1
+
+        with open("./conf.json", "w") as file:        
+            json.dump(conf, file)
+
+        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} phase {phaseNumber} has been removed.")
+
+    except Exception as error:
+        print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when removing the phase file.\n")
+        print(error)
+        sys.exit()
+
+def increasePhaseStatus():
+    with open("./conf.json", "r") as file:
+        conf = json.load(file)
+    
+    conf["phase"] += 1
+
+    with open("./conf.json", "w") as file:        
+        json.dump(conf, file)
+
+def increaseTotalPhase():
+    with open("./conf.json", "r") as file:
+        conf = json.load(file)
+    
+    conf["totalPhase"] += 1
+
+    with open("./conf.json", "w") as file:        
+        json.dump(conf, file)
+
+def upgradePhase():
+    confJSON = json.load(open("./conf.json"))
+    currentState = confJSON["phase"]
+    totalPhase = confJSON["totalPhase"]
+    stateToUpgrade = None
+    
+    del confJSON["phase"]
+    del confJSON["totalPhase"]
+    
+    class DBCREDS(BaseModel):
+        dbname: str
+        user: str
+        password: str
+        host: str
+        port: int
+    
+    creds = DBCREDS(**confJSON)
+
+    if sys.argv[2].lower() == "head":
+        stateToUpgrade = totalPhase
+    else:
+        try:
+            stateToUpgrade = int(sys.argv[2][1::]) + currentState
+
+            if stateToUpgrade > totalPhase:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} There is no such a phase.\n")
+                print(error)
+                sys.exit()
+
+        except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
+            print(error)
+            sys.exit()
+
+    for phase in range(currentState + 1, stateToUpgrade + 1):
+        upgradeSQL = json.load(open(f"./Phases/{phase}.json"))["upgrade"]
+
+        try:
+            with psycopg.connect(str(creds)) as conn:            
+                with conn.cursor() as cursor:
+                    cursor.execute(upgradeSQL)
+                    increasePhaseStatus()
+                
+        except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+            print(error)
+            sys.exit()
+
+def downgradePhase():
+    confJSON = json.load(open("./conf.json"))
+    currentState = confJSON["phase"]
+    stateToDowngrade = None
+    
+    del confJSON["phase"]
+    del confJSON["totalPhase"]
+
+    class DBCREDS(BaseModel):
+            dbname: str
+            user: str
+            password: str
+            host: str
+            port: int
+    
+    creds = DBCREDS(**confJSON)
+
+    if sys.argv[2].lower() == "base":
+        stateToDowngrade = 0
+    else:
+        try:
+            stateToDowngrade = currentState - int(sys.argv[2][1::])
+
+        except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
+            print(error)
+            sys.exit()
+
+    for phase in range(currentState, stateToDowngrade, -1):
+        downgradeSQL = json.load(open(f"./Phases/{phase}.json"))["downgrade"]
+
+        try:
+            with psycopg.connect(str(creds)) as conn:            
+                with conn.cursor() as cursor:
+                    cursor.execute(downgradeSQL)
+                     
+                    with open("./conf.json", "r") as file:
+                        conf = json.load(file)
+                    
+                    conf["phase"] -= 1
+
+                    with open("./conf.json", "w") as file:        
+                        json.dump(conf, file)
+                
+        except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+            print(error)
+            sys.exit()
+
+def restart():
+    try:
+        rmtree("./Phases")
+        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Removed Phases directory.")
+        remove("./conf.json")
+        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Removed conf.json.")
+    except Exception as error:
+        print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when restarting.\n")
+        print(error)
+        sys.exit()
+    
+def printUsage():
     usage = f"""
 {Back.WHITE}{Fore.RED}{Style.BRIGHT}----- USAGE -----{Style.RESET_ALL}
 
@@ -145,6 +317,15 @@ def main():
 {Style.BRIGHT}> python palembic.py restart{Style.RESET_ALL}
 
 - removes the config module and phases directory recursively
+
+{Style.BRIGHT}{Fore.CYAN}---{Style.RESET_ALL}
+
+{Style.BRIGHT}{Fore.MAGENTA}=== PHASES ==={Style.RESET_ALL}
+{Style.BRIGHT}> python palembic.py add phase{Style.RESET_ALL}
+- adds a new phase into the phases directory
+
+{Style.BRIGHT}> python palembic.py remove phase{Style.RESET_ALL}
+- removes the last phase
 
 {Style.BRIGHT}{Fore.CYAN}---{Style.RESET_ALL}
 
@@ -170,16 +351,36 @@ def main():
 {Style.BRIGHT}> python palembic.py downgrade base{Style.RESET_ALL}
 - downgrades current phase to the first phase
 """
+    print(usage)
+
+def main():
     # print USAGE if user enter sth wrong
-    if len(sys.argv) < 2 or len(sys.argv) > 3 or sys.argv[1].lower() not in ["start", "restart", "upgrade", "downgrade"]:
-        print(usage)
+    if len(sys.argv) < 2 or len(sys.argv) > 3 or sys.argv[1].lower() not in ["start", "restart", "upgrade", "downgrade", "add", "remove"]:
+        printUsage()
         sys.exit()
     
     # operation that'll be done when user enter start
     elif len(sys.argv) == 2 and sys.argv[1].lower() == "start":
         creds = getDatabaseCredentials()
         testDbConnection(creds)
-        createPhasesDirectory()
+        createConfJSON(creds)
+        createPhasesDirectory() # order is important 
+        addPhase() # added first phase
+    
+    elif len(sys.argv) == 2 and sys.argv[1].lower() == "restart":
+        restart()
+    
+    elif len(sys.argv) == 3 and sys.argv[1].lower() == "upgrade":
+        upgradePhase()
+    
+    elif len(sys.argv) == 3 and sys.argv[1].lower() == "downgrade":
+        downgradePhase()
+
+    elif len(sys.argv) == 3 and sys.argv[1].lower() == "add" and sys.argv[2].lower() == "phase":
+        addPhase()
+
+    elif len(sys.argv) == 3 and sys.argv[1].lower() == "remove" and sys.argv[2].lower() == "phase":
+        removePhase()
 
 if __name__ == "__main__":
     main()
