@@ -28,7 +28,7 @@ It'll create **conf.json** and **Phases** directory. They're essentials for pAle
 After starting the pAlembic you can go under the **Phases** and write your own upgrade and downgrade SQLs into the **``<number>``**.json file like that:
 
 *1.json*
-```
+```json
 {
   "upgrade": "create table users (user_id serial primary key, username varchar(50))",
   "downgrade": "drop table users"
@@ -51,7 +51,7 @@ python palembic.py downgrade -1
 python palembic.py base # downgrades to the very beginning
 ```
 
-After you're done with first phase file you can as much phase file as you want:
+After you're done with first phase file you can add as much phase file as you want:
 
 ```
 python palembic.py add phase
@@ -81,3 +81,7 @@ password=palembic
 host=localhost
 port=5433
 ```
+
+---
+
+Database credentials are stored plaintext in the conf.py, so if you're using pAlembic in production environment, give proper permission to the **conf.json** and **palembic.py**.
