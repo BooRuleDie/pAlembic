@@ -132,7 +132,8 @@ def addPhase():
 
     phase = {
         "upgrade" : "raw SQL here",
-        "downgrade" : "raw SQL here"
+        "downgrade" : "raw SQL here",
+        "label" : "name the phase"
     }
 
     try:
@@ -218,13 +219,16 @@ def upgradePhase():
             sys.exit()
 
     for phase in range(currentState + 1, stateToUpgrade + 1):
-        upgradeSQL = json.load(open(f"./Phases/{phase}.json"))["upgrade"]
-
+        phasefile = json.load(open(f"./Phases/{phase}.json"))
+        upgradeSQL = phasefile["upgrade"]
+        label = phasefile["label"]
+        
         try:
             with psycopg.connect(str(creds)) as conn:            
                 with conn.cursor() as cursor:
                     cursor.execute(upgradeSQL)
                     changePhaseStatus("+phase")
+                    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Upgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
                 
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
@@ -260,13 +264,16 @@ def downgradePhase():
             sys.exit()
 
     for phase in range(currentState, stateToDowngrade, -1):
-        downgradeSQL = json.load(open(f"./Phases/{phase}.json"))["downgrade"]
+        phasefile = json.load(open(f"./Phases/{phase}.json"))
+        downgradeSQL = phasefile["downgrade"]
+        label = phasefile["label"]
 
         try:
             with psycopg.connect(str(creds)) as conn:            
                 with conn.cursor() as cursor:
                     cursor.execute(downgradeSQL)
                     changePhaseStatus("-phase")
+                    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Downgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
                 
         except Exception as error:
             print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
