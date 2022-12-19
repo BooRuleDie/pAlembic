@@ -35,7 +35,8 @@ After starting the pAlembic you can go under the **Phases** and write your own u
 ```json
 {
   "upgrade": "create table users (user_id serial primary key, username varchar(50))",
-  "downgrade": "drop table users"
+  "downgrade": "drop table users",
+  "label": "create users table" 
 }
 ```
 
