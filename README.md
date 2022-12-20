@@ -6,7 +6,7 @@ pAlembic stands for pseudo alembic, it's the only raw SQL supported version of a
 
 # Brief Overview
 
-[Click Here](https://www.youtube.com/watch?v=Kfyb6UymNTg)
+[Click Here](https://www.youtube.com/watch?v=CFUiZCMRyx8)
 
 # Dependencies
 
