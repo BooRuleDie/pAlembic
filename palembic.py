@@ -184,11 +184,19 @@ def changePhaseStatus(change):
     with open("./conf.json", "w") as file:        
         json.dump(conf, file)
 
-def upgradePhase():
-    confJSON = json.load(open("./conf.json"))
+def upgradeOrDowngradePhase(upgradeOrDowngrade):
+    try:
+        with open("./conf.json", "r") as file:
+            confJSON = json.load(file)
+    except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
+            print(error)
+            sys.exit()
+
     currentState = confJSON["phase"]
     totalPhase = confJSON["totalPhase"]
     stateToUpgrade = None
+    stateToDowngrade = None
     
     del confJSON["phase"]
     del confJSON["totalPhase"]
@@ -202,83 +210,68 @@ def upgradePhase():
     
     creds = DBCREDS(**confJSON)
 
-    if sys.argv[2].lower() == "head":
-        stateToUpgrade = totalPhase
-    else:
-        try:
-            stateToUpgrade = int(sys.argv[2][1::]) + currentState
+    if upgradeOrDowngrade == "upgrade":
+        if sys.argv[2].lower() == "head":
+            stateToUpgrade = totalPhase
+        else:
+            try:
+                stateToUpgrade = int(sys.argv[2][1::]) + currentState
 
-            if stateToUpgrade > totalPhase:
-                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} There is no such a phase.\n")
+                if stateToUpgrade > totalPhase:
+                    print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} There is no such a phase.\n")
+                    print(error)
+                    sys.exit()
+
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
                 print(error)
                 sys.exit()
 
-        except Exception as error:
-            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
-            print(error)
-            sys.exit()
+        for phase in range(currentState + 1, stateToUpgrade + 1):
+            phasefile = json.load(open(f"./Phases/{phase}.json"))
+            upgradeSQL = phasefile["upgrade"]
+            label = phasefile["label"]
+            
+            try:
+                with psycopg.connect(str(creds)) as conn:            
+                    with conn.cursor() as cursor:
+                        cursor.execute(upgradeSQL)
+                        changePhaseStatus("+phase")
+                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Upgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
+                    
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+                print(error)
+                sys.exit()
 
-    for phase in range(currentState + 1, stateToUpgrade + 1):
-        phasefile = json.load(open(f"./Phases/{phase}.json"))
-        upgradeSQL = phasefile["upgrade"]
-        label = phasefile["label"]
-        
-        try:
-            with psycopg.connect(str(creds)) as conn:            
-                with conn.cursor() as cursor:
-                    cursor.execute(upgradeSQL)
-                    changePhaseStatus("+phase")
-                    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Upgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
-                
-        except Exception as error:
-            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
-            print(error)
-            sys.exit()
+    elif upgradeOrDowngrade == "downgrade":
+        if sys.argv[2].lower() == "base":
+            stateToDowngrade = 0
+        else:
+            try:
+                stateToDowngrade = currentState - int(sys.argv[2][1::])
 
-def downgradePhase():
-    confJSON = json.load(open("./conf.json"))
-    currentState = confJSON["phase"]
-    stateToDowngrade = None
-    
-    del confJSON["phase"]
-    del confJSON["totalPhase"]
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
+                print(error)
+                sys.exit()
 
-    class DBCREDS(BaseModel):
-            dbname: str
-            user: str
-            password: str
-            host: str
-            port: int
-    
-    creds = DBCREDS(**confJSON)
+        for phase in range(currentState, stateToDowngrade, -1):
+            phasefile = json.load(open(f"./Phases/{phase}.json"))
+            downgradeSQL = phasefile["downgrade"]
+            label = phasefile["label"]
 
-    if sys.argv[2].lower() == "base":
-        stateToDowngrade = 0
-    else:
-        try:
-            stateToDowngrade = currentState - int(sys.argv[2][1::])
-
-        except Exception as error:
-            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured.")
-            print(error)
-            sys.exit()
-
-    for phase in range(currentState, stateToDowngrade, -1):
-        phasefile = json.load(open(f"./Phases/{phase}.json"))
-        downgradeSQL = phasefile["downgrade"]
-        label = phasefile["label"]
-
-        try:
-            with psycopg.connect(str(creds)) as conn:            
-                with conn.cursor() as cursor:
-                    cursor.execute(downgradeSQL)
-                    changePhaseStatus("-phase")
-                    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Downgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
-                
-        except Exception as error:
-            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
-            print(error)
-            sys.exit()
+            try:
+                with psycopg.connect(str(creds)) as conn:            
+                    with conn.cursor() as cursor:
+                        cursor.execute(downgradeSQL)
+                        changePhaseStatus("-phase")
+                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Downgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
+                    
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+                print(error)
+                sys.exit()
 
 def restart():
     try:
@@ -297,22 +290,23 @@ def printUsage():
 
 
 {Style.BRIGHT}{Fore.YELLOW}=== START ==={Style.RESET_ALL}
-{Style.BRIGHT}> python palembic.py start{Style.RESET_ALL}
 
+{Style.BRIGHT}> python palembic.py start{Style.RESET_ALL}
 - creates phases directory
 - lets you enter database credentials to establish connection
-- creates first phase module
+- creates first phase file
 
 {Style.BRIGHT}{Fore.CYAN}---{Style.RESET_ALL}
 
 {Style.BRIGHT}{Fore.BLUE}=== RESTART ==={Style.RESET_ALL}
-{Style.BRIGHT}> python palembic.py restart{Style.RESET_ALL}
 
-- removes the config module and phases directory recursively
+{Style.BRIGHT}> python palembic.py restart{Style.RESET_ALL}
+- removes the config file and phases directory recursively
 
 {Style.BRIGHT}{Fore.CYAN}---{Style.RESET_ALL}
 
 {Style.BRIGHT}{Fore.MAGENTA}=== PHASES ==={Style.RESET_ALL}
+
 {Style.BRIGHT}> python palembic.py add phase{Style.RESET_ALL}
 - adds a new phase into the phases directory
 
@@ -322,6 +316,7 @@ def printUsage():
 {Style.BRIGHT}{Fore.CYAN}---{Style.RESET_ALL}
 
 {Style.BRIGHT}{Fore.GREEN}=== UPGRADE ==={Style.RESET_ALL}
+
 {Style.BRIGHT}> python palembic.py upgrade{Style.RESET_ALL}
 - upgrades current phase by 1
 
@@ -334,6 +329,7 @@ def printUsage():
 {Style.BRIGHT}{Fore.CYAN}---{Style.RESET_ALL}
 
 {Style.BRIGHT}{Fore.RED}=== DOWNGRADE ==={Style.RESET_ALL}
+
 {Style.BRIGHT}> python palembic.py downgrade{Style.RESET_ALL}
 - downgrades current phase by 1
 
@@ -363,10 +359,10 @@ def main():
         restart()
     
     elif len(sys.argv) == 3 and sys.argv[1].lower() == "upgrade":
-        upgradePhase()
+        upgradeOrDowngradePhase("upgrade")
     
     elif len(sys.argv) == 3 and sys.argv[1].lower() == "downgrade":
-        downgradePhase()
+        upgradeOrDowngradePhase("downgrade")
 
     elif len(sys.argv) == 3 and sys.argv[1].lower() == "add" and sys.argv[2].lower() == "phase":
         addPhase()

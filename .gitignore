@@ -172,3 +172,4 @@ poetry.toml
 
 test.py
 docker-compose.yml
+dockerComposeFiles/
