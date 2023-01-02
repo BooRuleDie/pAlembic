@@ -1,4 +1,5 @@
 from pydantic import BaseModel, BaseSettings
+import mysql.connector
 from colorama import Fore, Back, Style
 from os import mkdir, remove
 from shutil import rmtree
@@ -35,6 +36,7 @@ def getDatabaseCredentials():
             password: str
             host: str
             port: int
+            dbType: str
 
         dbcredsdict = dict()
         
@@ -44,6 +46,7 @@ def getDatabaseCredentials():
             dbcredsdict["password"] = input("Password: ")
             dbcredsdict["host"] = input("Hostname: ")
             dbcredsdict["port"] = int(input("Port: "))
+            dbcredsdict["dbType"] = input("Database Type: ")
 
             dbcreds = DBCREDS(**dbcredsdict)
             print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
@@ -63,6 +66,7 @@ def getDatabaseCredentials():
                 password: str
                 host: str
                 port: int
+                dbType: str
 
                 class Config:
                     env_file = ".env"
@@ -85,6 +89,7 @@ def getDatabaseCredentials():
                 password: str
                 host: str
                 port: int
+                dbType: str
 
             dbcreds = DBCREDS()
             print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Got all credentials.")
@@ -105,16 +110,104 @@ def createConfJSON(creds):
         
     print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} conf.json file has been created.")
 
-def testDbConnection(creds):
-    try:
-        with psycopg.connect(str(creds)) as conn:            
-            with conn.cursor():
-                print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Connected to the database successfully")
-                
-    except Exception as error:
-        print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
-        print(error)
-        sys.exit()
+def executeForDatabase(creds = None, upgradeOrDowngrade = None, currentState = None, stateToUpgrade = None, stateToDowngrade = None, dbType = None, testDB = True):
+    
+    if testDB and dbType == "postgresql":
+        try:
+            with psycopg.connect(str(creds)) as conn:            
+                with conn.cursor():
+                    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Connected to the database successfully")
+                    
+        except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+            print(error)
+            sys.exit()
+        
+        return 1 # I don't want this function to run rest of the code if it's used for testing the database connection
+    
+    elif testDB and dbType == "mysql":
+        try:
+            with mysql.connector.connect(host=creds.host,user=creds.user,password=creds.password, database=creds.dbname, port=creds.port) as conn:
+                with conn.cursor() as cursor:
+                    print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Connected to the database successfully")
+        except Exception as error:
+            print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+            print(error)
+            sys.exit()
+
+    if dbType == "postgresql" and upgradeOrDowngrade == "upgrade":
+        for phase in range(currentState + 1, stateToUpgrade + 1):
+            phasefile = json.load(open(f"./Phases/{phase}.json"))
+            upgradeSQL = phasefile["upgrade"]
+            label = phasefile["label"]
+            
+            try:
+                with psycopg.connect(str(creds)) as conn:            
+                    with conn.cursor() as cursor:
+                        cursor.execute(upgradeSQL)
+                        changePhaseStatus("+phase")
+                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Upgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
+                    
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+                print(error)
+                sys.exit()
+    
+    elif dbType == "postgresql" and upgradeOrDowngrade == "downgrade":
+        for phase in range(currentState, stateToDowngrade, -1):
+            phasefile = json.load(open(f"./Phases/{phase}.json"))
+            downgradeSQL = phasefile["downgrade"]
+            label = phasefile["label"]
+
+            try:
+                with psycopg.connect(str(creds)) as conn:            
+                    with conn.cursor() as cursor:
+                        cursor.execute(downgradeSQL)
+                        changePhaseStatus("-phase")
+                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Downgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
+                    
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+                print(error)
+                sys.exit()
+
+    elif dbType == "mysql" and upgradeOrDowngrade == "upgrade":
+        for phase in range(currentState + 1, stateToUpgrade + 1):
+            phasefile = json.load(open(f"./Phases/{phase}.json"))
+            upgradeSQL = phasefile["upgrade"]
+            label = phasefile["label"]
+            
+            try:
+                with mysql.connector.connect(host=creds.host,user=creds.user,password=creds.password, database=creds.dbname, port=creds.port) as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(upgradeSQL)
+                        conn.commit()
+                        changePhaseStatus("+phase")
+                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Upgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
+                    
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+                print(error)
+                sys.exit()
+
+    elif dbType == "mysql" and upgradeOrDowngrade == "downgrade":
+        for phase in range(currentState, stateToDowngrade, -1):
+            phasefile = json.load(open(f"./Phases/{phase}.json"))
+            downgradeSQL = phasefile["downgrade"]
+            label = phasefile["label"]
+
+            try:
+                with mysql.connector.connect(host=creds.host,user=creds.user,password=creds.password, database=creds.dbname, port=creds.port) as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(downgradeSQL)
+                        conn.commit()
+                        changePhaseStatus("-phase")
+                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Downgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
+                    
+            except Exception as error:
+                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
+                print(error)
+                sys.exit()
 
 def createPhasesDirectory():
     try:
@@ -195,11 +288,13 @@ def upgradeOrDowngradePhase(upgradeOrDowngrade):
 
     currentState = confJSON["phase"]
     totalPhase = confJSON["totalPhase"]
+    dbType = confJSON["dbType"]
     stateToUpgrade = None
     stateToDowngrade = None
     
     del confJSON["phase"]
     del confJSON["totalPhase"]
+    del confJSON["dbType"]
     
     class DBCREDS(BaseModel):
         dbname: str
@@ -227,23 +322,8 @@ def upgradeOrDowngradePhase(upgradeOrDowngrade):
                 print(error)
                 sys.exit()
 
-        for phase in range(currentState + 1, stateToUpgrade + 1):
-            phasefile = json.load(open(f"./Phases/{phase}.json"))
-            upgradeSQL = phasefile["upgrade"]
-            label = phasefile["label"]
-            
-            try:
-                with psycopg.connect(str(creds)) as conn:            
-                    with conn.cursor() as cursor:
-                        cursor.execute(upgradeSQL)
-                        changePhaseStatus("+phase")
-                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Upgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
-                    
-            except Exception as error:
-                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
-                print(error)
-                sys.exit()
-
+        executeForDatabase(creds, "upgrade", currentState, stateToUpgrade=stateToUpgrade, dbType=dbType, testDB=False)
+    
     elif upgradeOrDowngrade == "downgrade":
         if sys.argv[2].lower() == "base":
             stateToDowngrade = 0
@@ -256,22 +336,7 @@ def upgradeOrDowngradePhase(upgradeOrDowngrade):
                 print(error)
                 sys.exit()
 
-        for phase in range(currentState, stateToDowngrade, -1):
-            phasefile = json.load(open(f"./Phases/{phase}.json"))
-            downgradeSQL = phasefile["downgrade"]
-            label = phasefile["label"]
-
-            try:
-                with psycopg.connect(str(creds)) as conn:            
-                    with conn.cursor() as cursor:
-                        cursor.execute(downgradeSQL)
-                        changePhaseStatus("-phase")
-                        print(f"{Fore.GREEN}{Style.BRIGHT}[+]{Style.RESET_ALL} Downgraded {Style.BRIGHT}{label}{Style.RESET_ALL}.")
-                    
-            except Exception as error:
-                print(f"{Fore.RED}{Style.BRIGHT}[-]{Style.RESET_ALL} An error occured when trying to connect the database.\n")
-                print(error)
-                sys.exit()
+        executeForDatabase(creds, "downgrade", currentState, stateToDowngrade=stateToDowngrade, dbType=dbType, testDB=False)
 
 def restart():
     try:
@@ -350,7 +415,7 @@ def main():
     # operation that'll be done when user enter start
     elif len(sys.argv) == 2 and sys.argv[1].lower() == "start":
         creds = getDatabaseCredentials()
-        testDbConnection(creds)
+        executeForDatabase(creds)
         createConfJSON(creds)
         createPhasesDirectory() # order is important 
         addPhase() # added first phase

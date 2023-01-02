@@ -2,11 +2,14 @@
 
 pAlembic stands for pseudo alembic, it's the only raw SQL supported version of alembic. Also it doesn't create a table in the database you're working with.
 
-*(It only supports postgreSQL currently)*
-
 # Brief Overview
 
 [Click Here](https://www.youtube.com/watch?v=CFUiZCMRyx8)
+
+# Supported Databases
+
+* PostgreSQL
+* MySQL
 
 # Dependencies
 
@@ -85,6 +88,8 @@ user=<anything>
 password=<anything>
 host=<anything>
 port=<anything>
+dbType=<one of strings specified below> 
+# mysql, postgresql
 ```
 
 ---
