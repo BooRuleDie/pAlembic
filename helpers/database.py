@@ -123,6 +123,7 @@ def insert_new_migration(upgrade, downgrade, label):
             print("[x] Migration Error (insert_new_migration)")
             print(f"[x] Error: {error}")
             print("[!] Rollbacked")
+            print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
 
             return -1
 
@@ -218,6 +219,7 @@ def apply_upgrade(label):
             print("[x] Migration Error (apply_upgrade)")
             print(f"[x] Error: {error}")
             print("[!] Rollbacked")
+            print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
 
             return -1
 
@@ -297,6 +299,7 @@ def apply_downgrade(label):
             print("[x] Migration Error (apply_downgrade)")
             print(f"[x] Error: {error}")
             print("[!] Rollbacked")
+            print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
 
             return -1
 
