@@ -107,4 +107,3 @@ def apply_new_migration(migrations_dir, label):
         print("[x] Wrong or Non-Existed Label Specified")
         exit()
         
-        

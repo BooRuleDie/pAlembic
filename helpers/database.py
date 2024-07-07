@@ -2,6 +2,19 @@ import mysql.connector
 from .config import DB_CONFIG
 
 
+def has_DDL(upgrade: str, downgrade: str) -> bool:
+    DDLs = ["CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME"]
+
+    for DDL in DDLs:
+        if DDL in upgrade.upper():
+            return True
+
+        if DDL in downgrade.upper():
+            return True
+
+    return False
+
+
 def get_connection():
     try:
         con = mysql.connector.connect(
@@ -96,7 +109,7 @@ def insert_new_migration(upgrade, downgrade, label):
 
         # start transaction
         con.start_transaction()
-        
+
         # execute upgrade SQL
         cursor.execute(upgrade)
         print("[+] Upgraded Successfully")
@@ -122,8 +135,14 @@ def insert_new_migration(upgrade, downgrade, label):
         con.rollback()
         print("[x] Migration Error (insert_new_migration)")
         print(f"[x] Error: {error}")
-        print("[!] Rollbacked")
-        print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+
+        if has_DDL(upgrade, downgrade):
+            print(
+                "[x] Upgrade or Downgrade Has DDL Command, MySQL Doesn't Support DDL Rollback"
+            )
+            print("[x] Rollback Failed, Take Action Manually")
+        else:
+            print("[!] Rollbacked")
 
         return -1
 
@@ -141,11 +160,9 @@ def apply_upgrade(label):
 
         # Start transaction
         con.start_transaction()
-        
+
         # Get the id of the current migration
-        cursor.execute(
-            """SELECT id FROM Palembic_Migrations WHERE is_current = 1;"""
-        )
+        cursor.execute("""SELECT id FROM Palembic_Migrations WHERE is_current = 1;""")
         current_migration = cursor.fetchone()
         if not current_migration:
             # apply the first migration and quit
@@ -217,8 +234,8 @@ def apply_upgrade(label):
         con.rollback()
         print("[x] Migration Error (apply_upgrade)")
         print(f"[x] Error: {error}")
-        print("[!] Rollbacked")
-        print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+        print("[x] Upgrade Has DDL Command, MySQL Doesn't Support DDL Rollback")
+        print("[x] Rollback Fails If Upgrade Has DDL")
 
         return -1
 
@@ -238,9 +255,7 @@ def apply_downgrade(label):
         con.start_transaction()
 
         # Get the id of the current migration
-        cursor.execute(
-            """SELECT id FROM Palembic_Migrations WHERE is_current = 1;"""
-        )
+        cursor.execute("""SELECT id FROM Palembic_Migrations WHERE is_current = 1;""")
         current_migration = cursor.fetchone()
         if not current_migration:
             raise Exception("No current migration found.")
@@ -296,8 +311,8 @@ def apply_downgrade(label):
         con.rollback()
         print("[x] Migration Error (apply_downgrade)")
         print(f"[x] Error: {error}")
-        print("[!] Rollbacked")
-        print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+        print("[x] Upgrade Has DDL Command, MySQL Doesn't Support DDL Rollback")
+        print("[x] Rollback Fails If Upgrade Has DDL")
 
         return -1
 
