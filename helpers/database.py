@@ -96,36 +96,36 @@ def insert_new_migration(upgrade, downgrade, label):
 
         # start transaction
         con.start_transaction()
-        try:
-            # execute upgrade SQL
-            cursor.execute(upgrade)
-            print("[+] Upgraded Successfully")
+        
+        # execute upgrade SQL
+        cursor.execute(upgrade)
+        print("[+] Upgraded Successfully")
 
-            # execute downgrade SQL
-            cursor.execute(downgrade)
-            print("[+] Downgraded Successfully")
+        # execute downgrade SQL
+        cursor.execute(downgrade)
+        print("[+] Downgraded Successfully")
 
-            # Insert the new migration
-            cursor.execute(
-                """
-                INSERT INTO Palembic_Migrations (label, upgrade, downgrade, is_current)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (label, upgrade, downgrade, 0),
-            )
-            print("[+] New Migration Registered")
+        # Insert the new migration
+        cursor.execute(
+            """
+            INSERT INTO Palembic_Migrations (label, upgrade, downgrade, is_current)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (label, upgrade, downgrade, 0),
+        )
+        print("[+] New Migration Registered")
 
-            # Commit the transaction
-            con.commit()
-        except Exception as error:
-            # Rollback transaction on error
-            con.rollback()
-            print("[x] Migration Error (insert_new_migration)")
-            print(f"[x] Error: {error}")
-            print("[!] Rollbacked")
-            print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+        # Commit the transaction
+        con.commit()
+    except Exception as error:
+        # Rollback transaction on error
+        con.rollback()
+        print("[x] Migration Error (insert_new_migration)")
+        print(f"[x] Error: {error}")
+        print("[!] Rollbacked")
+        print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
 
-            return -1
+        return -1
 
     finally:
         if cursor:
@@ -141,87 +141,86 @@ def apply_upgrade(label):
 
         # Start transaction
         con.start_transaction()
-
-        try:
-            # Get the id of the current migration
+        
+        # Get the id of the current migration
+        cursor.execute(
+            """SELECT id FROM Palembic_Migrations WHERE is_current = 1;"""
+        )
+        current_migration = cursor.fetchone()
+        if not current_migration:
+            # apply the first migration and quit
             cursor.execute(
-                """SELECT id FROM Palembic_Migrations WHERE is_current = 1;"""
+                """SELECT id, upgrade, downgrade, label FROM Palembic_Migrations ORDER BY id ASC LIMIT 1;"""
             )
-            current_migration = cursor.fetchone()
-            if not current_migration:
-                # apply the first migration and quit
-                cursor.execute(
-                    """SELECT id, upgrade, downgrade, label FROM Palembic_Migrations ORDER BY id ASC LIMIT 1;"""
-                )
-                first_migration = cursor.fetchone()
+            first_migration = cursor.fetchone()
 
-                cursor.execute(first_migration["upgrade"])
-                print(f"[+] Executed upgrade SQL: {first_migration['label']}")
+            cursor.execute(first_migration["upgrade"])
+            print(f"[+] Executed upgrade SQL: {first_migration['label']}")
 
-                cursor.execute(
-                    "UPDATE Palembic_Migrations SET is_current = 1 WHERE id = %s;",
-                    (first_migration["id"],),
-                )
-
-                con.commit()
-                print("[+] Database Upgraded Successfully")
-                return
-
-            current_id = current_migration["id"]
-
-            # Get the id of the specified label
             cursor.execute(
-                """SELECT id FROM Palembic_Migrations WHERE label = %s""",
-                (label,),
-            )
-            target_migration = cursor.fetchone()
-            if not target_migration:
-                raise Exception(f"No migration found with label {label}.")
-
-            target_id = target_migration["id"]
-
-            # Check that the target id is greater than the current id
-            if target_id <= current_id:
-                raise Exception(
-                    "The specified label's id must be greater than the current migration's id."
-                )
-
-            # Get all upgrade SQLs between the current id and the target id
-            cursor.execute(
-                """SELECT upgrade, label FROM Palembic_Migrations
-                WHERE id > %s AND id <= %s ORDER BY id ASC;""",
-                (current_id, target_id),
+                "UPDATE Palembic_Migrations SET is_current = 1 WHERE id = %s;",
+                (first_migration["id"],),
             )
 
-            upgrades = cursor.fetchall()
-
-            # Execute all upgrade SQLs one by one
-            for upgrade in upgrades:
-                cursor.execute(upgrade["upgrade"])
-                print(f"[+] Executed upgrade SQL: {upgrade['label']}")
-
-            # Update the current migration
-            cursor.execute(
-                """UPDATE Palembic_Migrations SET is_current = 0 WHERE is_current = 1"""
-            )
-            cursor.execute(
-                """UPDATE Palembic_Migrations SET is_current = 1 WHERE label = %s""",
-                (label,),
-            )
-
-            # Commit the transaction
             con.commit()
             print("[+] Database Upgraded Successfully")
+            return
 
-        except Exception as error:
-            # Rollback transaction on error
-            con.rollback()
-            print("[x] Migration Error (apply_upgrade)")
-            print(f"[x] Error: {error}")
-            print("[!] Rollbacked")
-            print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+        current_id = current_migration["id"]
 
-            return -1
+        # Get the id of the specified label
+        cursor.execute(
+            """SELECT id FROM Palembic_Migrations WHERE label = %s""",
+            (label,),
+        )
+        target_migration = cursor.fetchone()
+        if not target_migration:
+            raise Exception(f"No migration found with label {label}.")
+
+        target_id = target_migration["id"]
+
+        # Check that the target id is greater than the current id
+        if target_id <= current_id:
+            raise Exception(
+                "The specified label's id must be greater than the current migration's id."
+            )
+
+        # Get all upgrade SQLs between the current id and the target id
+        cursor.execute(
+            """SELECT upgrade, label FROM Palembic_Migrations
+            WHERE id > %s AND id <= %s ORDER BY id ASC;""",
+            (current_id, target_id),
+        )
+
+        upgrades = cursor.fetchall()
+
+        # Execute all upgrade SQLs one by one
+        for upgrade in upgrades:
+            cursor.execute(upgrade["upgrade"])
+            print(f"[+] Executed upgrade SQL: {upgrade['label']}")
+
+        # Update the current migration
+        cursor.execute(
+            """UPDATE Palembic_Migrations SET is_current = 0 WHERE is_current = 1"""
+        )
+        cursor.execute(
+            """UPDATE Palembic_Migrations SET is_current = 1 WHERE label = %s""",
+            (label,),
+        )
+
+        # Commit the transaction
+        con.commit()
+        print("[+] Database Upgraded Successfully")
+
+    except Exception as error:
+        # Rollback transaction on error
+        con.rollback()
+        print("[x] Migration Error (apply_upgrade)")
+        print(f"[x] Error: {error}")
+        print("[!] Rollbacked")
+        print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+
+        return -1
 
     finally:
         if cursor:
@@ -238,70 +237,69 @@ def apply_downgrade(label):
         # Start transaction
         con.start_transaction()
 
-        try:
-            # Get the id of the current migration
-            cursor.execute(
-                """SELECT id FROM Palembic_Migrations WHERE is_current = 1;"""
-            )
-            current_migration = cursor.fetchone()
-            if not current_migration:
-                raise Exception("No current migration found.")
+        # Get the id of the current migration
+        cursor.execute(
+            """SELECT id FROM Palembic_Migrations WHERE is_current = 1;"""
+        )
+        current_migration = cursor.fetchone()
+        if not current_migration:
+            raise Exception("No current migration found.")
 
-            current_id = current_migration["id"]
+        current_id = current_migration["id"]
 
-            # Get the id of the specified label
-            cursor.execute(
-                """SELECT id FROM Palembic_Migrations WHERE label = %s""",
-                (label,),
-            )
-            target_migration = cursor.fetchone()
-            if not target_migration:
-                raise Exception(f"No migration found with label {label}.")
+        # Get the id of the specified label
+        cursor.execute(
+            """SELECT id FROM Palembic_Migrations WHERE label = %s""",
+            (label,),
+        )
+        target_migration = cursor.fetchone()
+        if not target_migration:
+            raise Exception(f"No migration found with label {label}.")
 
-            target_id = target_migration["id"]
+        target_id = target_migration["id"]
 
-            # Check that the target id is smaller than the current id
-            if target_id >= current_id:
-                raise Exception(
-                    "The specified label's id must be smaller than the current migration's id."
-                )
-
-            # Get all downgrade SQLs between the current id and the target id
-            cursor.execute(
-                """SELECT downgrade, label FROM Palembic_Migrations
-                WHERE id <= %s AND id > %s ORDER BY id DESC;""",
-                (current_id, target_id),
+        # Check that the target id is smaller than the current id
+        if target_id >= current_id:
+            raise Exception(
+                "The specified label's id must be smaller than the current migration's id."
             )
 
-            downgrades = cursor.fetchall()
+        # Get all downgrade SQLs between the current id and the target id
+        cursor.execute(
+            """SELECT downgrade, label FROM Palembic_Migrations
+            WHERE id <= %s AND id > %s ORDER BY id DESC;""",
+            (current_id, target_id),
+        )
 
-            # Execute all upgrade SQLs one by one
-            for downgrade in downgrades:
-                cursor.execute(downgrade["downgrade"])
-                print(f"[+] Executed downgrade SQL: {downgrade['label']}")
+        downgrades = cursor.fetchall()
 
-            # Update the current migration
-            cursor.execute(
-                """UPDATE Palembic_Migrations SET is_current = 0 WHERE is_current = 1"""
-            )
-            cursor.execute(
-                """UPDATE Palembic_Migrations SET is_current = 1 WHERE label = %s""",
-                (label,),
-            )
+        # Execute all upgrade SQLs one by one
+        for downgrade in downgrades:
+            cursor.execute(downgrade["downgrade"])
+            print(f"[+] Executed downgrade SQL: {downgrade['label']}")
 
-            # Commit the transaction
-            con.commit()
-            print("[+] Database Downgraded Successfully")
+        # Update the current migration
+        cursor.execute(
+            """UPDATE Palembic_Migrations SET is_current = 0 WHERE is_current = 1"""
+        )
+        cursor.execute(
+            """UPDATE Palembic_Migrations SET is_current = 1 WHERE label = %s""",
+            (label,),
+        )
 
-        except Exception as error:
-            # Rollback transaction on error
-            con.rollback()
-            print("[x] Migration Error (apply_downgrade)")
-            print(f"[x] Error: {error}")
-            print("[!] Rollbacked")
-            print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+        # Commit the transaction
+        con.commit()
+        print("[+] Database Downgraded Successfully")
 
-            return -1
+    except Exception as error:
+        # Rollback transaction on error
+        con.rollback()
+        print("[x] Migration Error (apply_downgrade)")
+        print(f"[x] Error: {error}")
+        print("[!] Rollbacked")
+        print("[!] MySQL Doesn't Support DDL(CREATE, ALTER, DROP ...) Rollback, Take Action Manually If the Database is MySQL ")
+
+        return -1
 
     finally:
         if cursor:
