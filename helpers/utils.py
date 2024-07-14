@@ -101,8 +101,7 @@ def apply_new_migration(migrations_dir, label):
                 break
     
     if dir_found:
-        error = insert_new_migration(upgrade_content, downgrade_content, label)
-        return error
+        insert_new_migration(upgrade_content, downgrade_content, label)
     else:
         print("[x] Wrong or Non-Existed Label Specified")
         exit()

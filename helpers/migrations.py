@@ -34,10 +34,8 @@ def create(migrations_dir, label: str):
 
 
 def apply(migrations_dir, label: str):
-    error = apply_new_migration(migrations_dir, label)
-    if not error:
-        print("[!] Fetching...")
-        fetch(migrations_dir, overwrite=True, verbose=False)
+    apply_new_migration(migrations_dir, label)
+    # don't fetch on apply. If you'd like to fetch, you can do it after the apply manually
 
 
 def upgrade(migrations_dir, label: str):
